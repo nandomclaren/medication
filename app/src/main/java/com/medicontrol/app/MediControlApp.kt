@@ -3,6 +3,7 @@ package com.medicontrol.app
 import android.app.Application
 import com.medicontrol.app.alarm.AlarmScheduler
 import com.medicontrol.app.alarm.NotificationHelper
+import com.medicontrol.app.data.backup.BackupManager
 import com.medicontrol.app.data.db.AppDatabase
 import com.medicontrol.app.data.repository.MedicationRepository
 
@@ -17,6 +18,7 @@ class MediControlApp : Application() {
     val repository: MedicationRepository by lazy {
         MedicationRepository(database.medicationDao(), database.doseRecordDao(), alarmScheduler)
     }
+    val backupManager: BackupManager by lazy { BackupManager(this, database) }
 
     override fun onCreate() {
         super.onCreate()

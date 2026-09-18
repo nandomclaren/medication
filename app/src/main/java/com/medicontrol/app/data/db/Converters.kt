@@ -3,6 +3,8 @@ package com.medicontrol.app.data.db
 import androidx.room.TypeConverter
 import com.medicontrol.app.data.model.DoseStatus
 import com.medicontrol.app.data.model.MedicationIcon
+import com.medicontrol.app.data.model.RecurrenceType
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -41,4 +43,19 @@ class Converters {
 
     @TypeConverter
     fun toDoseStatus(value: String): DoseStatus = DoseStatus.valueOf(value)
+
+    @TypeConverter
+    fun fromRecurrenceType(type: RecurrenceType): String = type.name
+
+    @TypeConverter
+    fun toRecurrenceType(value: String): RecurrenceType = RecurrenceType.valueOf(value)
+
+    @TypeConverter
+    fun fromWeekdaySet(days: Set<DayOfWeek>): String =
+        days.joinToString(separator = ",") { it.value.toString() }
+
+    @TypeConverter
+    fun toWeekdaySet(value: String): Set<DayOfWeek> =
+        if (value.isBlank()) emptySet()
+        else value.split(",").map { DayOfWeek.of(it.trim().toInt()) }.toSet()
 }

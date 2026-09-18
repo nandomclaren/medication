@@ -4,4 +4,7 @@
     <string name="notification_channel_description">Alertas no horário exato de cada dose</string>
     <string name="notification_action_taken">Marcar como tomada</string>
     <string name="notification_action_skip">Pular</string>
+    <string name="notification_action_taken_all">Marcar todos como tomados</string>
+    <string name="notification_action_skip_all">Pular todos</string>
+    <string name="notification_action_snooze">Soneca %1$d min</string>
 </resources>

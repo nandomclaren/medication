@@ -13,8 +13,8 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * Ponto único de acesso aos dados: combina Room (persistência) com o
- * [AlarmScheduler] (agendamento do sistema), para que a UI nunca precise
- * lidar diretamente com AlarmManager.
+ * [AlarmScheduler] (agendamento do sistema), para que a UI e os
+ * BroadcastReceivers nunca precisem mexer em AlarmManager ou estoque na mão.
  */
 class MedicationRepository(
     private val medicationDao: MedicationDao,
@@ -26,26 +26,28 @@ class MedicationRepository(
 
     suspend fun getMedication(id: Long): Medication? = medicationDao.getById(id)
 
-    /** Insere ou atualiza um medicamento e (re)agenda seus alarmes de acordo. */
-    suspend fun saveMedication(medication: Medication): Long {
-        val previous = if (medication.id != 0L) medicationDao.getById(medication.id) else null
-        previous?.let { alarmScheduler.cancelAll(it) }
+    suspend fun getAllActiveMedications(): List<Medication> = medicationDao.getAllActive()
 
+    /** Insere ou atualiza um medicamento e reconcilia os alarmes de acordo com a nova cadência. */
+    suspend fun saveMedication(medication: Medication): Long {
         val id = if (medication.id == 0L) {
             medicationDao.insert(medication)
         } else {
             medicationDao.update(medication)
             medication.id
         }
-
-        val saved = medication.copy(id = id)
-        alarmScheduler.scheduleAll(saved)
+        reconcileAlarms()
         return id
     }
 
     suspend fun deleteMedication(medication: Medication) {
-        alarmScheduler.cancelAll(medication)
         medicationDao.delete(medication)
+        reconcileAlarms()
+    }
+
+    /** Recalcula os alarmes do sistema a partir do conjunto atual de medicamentos ativos. Chamado após salvar/excluir e no boot. */
+    suspend fun reconcileAlarms() {
+        alarmScheduler.reconcile(medicationDao.getAllActive())
     }
 
     /** Doses do dia [date], já cruzadas com o histórico e ordenadas por horário. */
@@ -56,7 +58,7 @@ class MedicationRepository(
 
         return medications
             .flatMap { medication ->
-                medication.times.map { time ->
+                medication.doseTimesOn(date).map { time ->
                     val record = recordByKey[Triple(medication.id, date, time)]
                     DoseUiModel(
                         medication = medication,
@@ -69,21 +71,51 @@ class MedicationRepository(
             .sortedBy { it.time }
     }
 
-    /** Alterna o status da dose entre TOMADA e PENDENTE (usado pelo checkbox da Home). */
+    /** Usado pelo checkbox da Home: alterna entre TOMADA e PENDENTE. */
     suspend fun toggleDoseTaken(medication: Medication, date: LocalDate, time: LocalTime, taken: Boolean) {
-        if (taken) {
+        setDoseStatus(medication, date, time, if (taken) DoseStatus.TAKEN else null)
+    }
+
+    /** Usado pelas ações "Marcar todos"/"Pular todos" da notificação agrupada. */
+    suspend fun setGroupDoseStatus(medicationIds: List<Long>, date: LocalDate, time: LocalTime, status: DoseStatus) {
+        medicationIds.forEach { id ->
+            medicationDao.getById(id)?.let { setDoseStatus(it, date, time, status) }
+        }
+    }
+
+    /**
+     * Define o status de uma dose. [status] nulo volta a dose para "pendente"
+     * (remove o registro). Ajusta o estoque do medicamento quando a dose entra
+     * ou sai do status TOMADA — inclusive ao desfazer uma marcação.
+     */
+    suspend fun setDoseStatus(medication: Medication, date: LocalDate, time: LocalTime, status: DoseStatus?) {
+        val previous = doseRecordDao.getBetween(date, date)
+            .firstOrNull { it.medicationId == medication.id && it.scheduledTime == time }
+
+        val wasTaken = previous?.status == DoseStatus.TAKEN
+        val willBeTaken = status == DoseStatus.TAKEN
+        if (wasTaken != willBeTaken) {
+            adjustStock(medication, delta = if (willBeTaken) -1 else 1)
+        }
+
+        if (status == null) {
+            doseRecordDao.deleteSlot(medication.id, date, time)
+        } else {
             doseRecordDao.upsert(
                 DoseRecord(
                     medicationId = medication.id,
                     scheduledDate = date,
                     scheduledTime = time,
-                    status = DoseStatus.TAKEN,
+                    status = status,
                     actionAt = System.currentTimeMillis()
                 )
             )
-        } else {
-            doseRecordDao.deleteSlot(medication.id, date, time)
         }
+    }
+
+    private suspend fun adjustStock(medication: Medication, delta: Int) {
+        val quantity = medication.stockQuantity ?: return
+        medicationDao.update(medication.copy(stockQuantity = (quantity + delta).coerceAtLeast(0)))
     }
 
     /**
@@ -107,7 +139,7 @@ class MedicationRepository(
                 val hasMissedDose = medications
                     .filter { it.isActiveOn(date) }
                     .any { medication ->
-                        medication.times.any { time ->
+                        medication.doseTimesOn(date).any { time ->
                             Triple(medication.id, date, time) !in takenKeys
                         }
                     }

@@ -15,6 +15,15 @@ interface DoseRecordDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(record: DoseRecord)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(records: List<DoseRecord>)
+
+    @Query("SELECT * FROM dose_records")
+    suspend fun getAll(): List<DoseRecord>
+
+    @Query("DELETE FROM dose_records")
+    suspend fun deleteAll()
+
     @Query(
         "DELETE FROM dose_records WHERE medicationId = :medicationId " +
             "AND scheduledDate = :date AND scheduledTime = :time"

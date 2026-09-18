@@ -15,6 +15,12 @@ interface MedicationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(medication: Medication): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(medications: List<Medication>)
+
+    @Query("DELETE FROM medications")
+    suspend fun deleteAll()
+
     @Update
     suspend fun update(medication: Medication)
 

@@ -20,22 +20,36 @@ app/src/main/java/com/medicontrol/app/
 │   ├── entity/        # Medication, DoseRecord (Room @Entity)
 │   ├── dao/            # MedicationDao, DoseRecordDao
 │   ├── db/              # AppDatabase, Converters (TypeConverters)
-│   ├── model/           # Enums e DoseUiModel
+│   ├── model/           # Enums (RecurrenceType, DoseStatus, ...) e DoseUiModel
+│   ├── backup/           # BackupData (DTOs serializáveis) + BackupManager (export/import via SAF)
 │   └── repository/      # MedicationRepository (une Room + AlarmManager)
 ├── ui/
 │   ├── theme/            # Color/Theme/Type — Material You + dark/light
 │   ├── components/       # MedicationIconView (Canvas), DaySelector, Icon/ColorPickerRow
 │   ├── home/              # Tela principal
 │   ├── addedit/           # Cadastro/edição de medicamento
+│   ├── backup/            # Tela de exportar/restaurar backup
 │   └── navigation/        # NavHost
 └── util/                    # Formatação de datas/horas
 ```
 
+## Funcionalidades
+
+- Cadastro de medicamento com ícone (Canvas), cor, dosagem, período de tratamento (uso contínuo ou com data de término) e **cadência**: todos os dias, dias específicos da semana, a cada X dias, ou a cada X horas (ex.: antibiótico de 8 em 8h).
+- Home com barra de dias, indicador de adesão (dias com dose não marcada ficam em vermelho) e badge de "Última dose!" no dia de término.
+- Lembretes exatos (`AlarmManager.setExactAndAllowWhileIdle`) que sobrevivem a Doze Mode e reboot.
+- **Notificação agrupada por horário**: remédios com o mesmo horário caem numa única notificação — 1 remédio usa "Tomei"/"Pular"; 2 ou mais usam "Marcar todos como tomados"/"Pular todos" e listam cada um. Botão de soneca (10 min) em ambos os casos.
+- **Controle de estoque** opcional por medicamento: decrementa a cada dose tomada (e desfaz ao desmarcar), com aviso visual de estoque baixo na Home e no cadastro.
+- **Backup/restore local**: exporta medicamentos + histórico para um `.json`, escolhendo o destino pelo seletor do próprio Android (inclui Google Drive, se instalado) — sem conta nem servidor.
+
 ## Decisões de modelagem importantes
 
-- **`DoseRecord` só é gravado quando o usuário interage** com a dose (marca como tomada/pula). Doses futuras ou passadas nunca tocadas são tratadas como "pendentes virtuais" pelo `MedicationRepository`, cruzando `Medication.times` com o histórico no momento da consulta. Isso evita ter que pré-gerar milhares de linhas para medicamentos de uso contínuo.
-- **Agendamento "auto-perpetuante":** em vez de agendar todas as doses futuras (inviável para uso contínuo), o `AlarmScheduler` agenda só a *próxima* ocorrência de cada horário. Quando o `AlarmReceiver` dispara, ele mostra a notificação e reagenda o mesmo horário para o dia seguinte — parando sozinho quando a data de término é ultrapassada.
+- **`DoseRecord` só é gravado quando o usuário interage** com a dose (marca como tomada/pula). Doses futuras ou passadas nunca tocadas são tratadas como "pendentes virtuais" pelo `MedicationRepository`, cruzando `Medication.doseTimesOn(date)` com o histórico no momento da consulta. Isso evita ter que pré-gerar milhares de linhas para medicamentos de uso contínuo.
+- **Cadência via `RecurrenceType`:** `Medication.isScheduledOn(date)` decide se um dia bate com o padrão (diário / dias da semana / a cada X dias); `Medication.scheduleTimes` deriva os horários do dia — fixos para os três primeiros tipos, gerados a partir de um horário-âncora + intervalo para "a cada X horas".
+- **Alarmes por horário, não por medicamento:** o `AlarmScheduler` agenda um alarme do sistema por HORÁRIO distinto entre os medicamentos ativos (não um por medicamento). Quando dispara, o `AlarmReceiver` consulta o Room na hora pra descobrir quem está de fato agendado pra aquele instante hoje — é isso que permite agrupar tudo numa notificação só. `MedicationRepository.reconcileAlarms()` recalcula esse conjunto de horários (liga os novos, desliga os que ninguém mais usa) sempre que um medicamento é salvo/excluído, e também no boot.
+- **Agendamento "auto-perpetuante":** como o AlarmManager não tem alarme exato recorrente, cada disparo reagenda o mesmo horário para o dia seguinte — parando sozinho quando nenhum medicamento mais precisa daquele horário (ou a data de término é ultrapassada). A soneca usa um disparo único separado, sem mexer nesse ciclo.
 - **Indicador de adesão** (dias em vermelho na barra superior): calculado em memória cruzando os medicamentos ativos em cada dia passado com os `DoseRecord` de status `TAKEN` — sem job em background.
+- **Backup é restauração, não mescla:** importar um `.json` apaga e recria as tabelas `medications`/`dose_records` dentro de uma transação (`AppDatabase.withTransaction`). A UI confirma isso com o usuário antes de deixar escolher o arquivo.
 
 ## Build
 
@@ -107,8 +121,13 @@ adb shell date $(date -d "+2 minutes" +%m%d%H%M%Y.%S)   # Linux/macOS com GNU da
 
 Cuidado: isso também acelera outros apps/serviços do sistema; prefira cadastrar um horário próximo (passo 2) quando possível.
 
+## Próximas features (planejadas, ainda não implementadas)
+
+- **Relatório de adesão exportável** (PDF/CSV) para levar ao médico — os dados já existem em `DoseRecord`/`getMissedDays`, falta só a tela de exportação e o formato de saída.
+- **Widget de tela inicial** ("próximas doses"), em Jetpack Glance. Mockup validado: https://claude.ai/artifact/BJ9kdCyu94qcXCBB6rtxdL (dois temas, dois tamanhos e o estado vazio).
+
 ## Sobre o Railway
 
-O app é propositalmente **offline** (Room local, sem conta de usuário, sem sync) — não há necessidade de backend para o funcionamento descrito. O Railway não entra no fluxo atual.
+O app é propositalmente **offline** (Room local, sem conta de usuário, sem sync) — não há necessidade de backend para o funcionamento descrito, incluindo o backup: ele usa o seletor de arquivos do próprio Android (Storage Access Framework), então salvar no Google Drive já funciona sem servidor, API key ou OAuth — quem resolve o "onde salvar" é o sistema.
 
-Se no futuro você quiser **backup/sincronização entre aparelhos**, o Railway seria um bom lugar para hospedar uma API simples (ex.: FastAPI/Node + Postgres) que exporta/importa os dados do Room via JSON — mas isso é uma funcionalidade nova, não algo necessário para o app funcionar como especificado aqui.
+Se no futuro você quiser **sincronização automática entre aparelhos** (sem o usuário exportar/importar manualmente), aí sim o Railway seria um bom lugar para hospedar uma API simples (ex.: FastAPI/Node + Postgres) por trás de uma conta de usuário — mas isso é uma funcionalidade bem maior (autenticação, resolução de conflito entre aparelhos), não o que foi pedido até aqui.

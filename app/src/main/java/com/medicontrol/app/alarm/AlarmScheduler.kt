@@ -12,45 +12,63 @@ import java.time.LocalTime
 import java.time.ZoneId
 
 /**
- * Agenda/cancela os alarmes exatos de um medicamento usando [AlarmManager].
+ * Agenda/cancela os alarmes exatos do app usando [AlarmManager].
  *
- * Estratégia: em vez de agendar TODAS as doses futuras (inviável para uso
- * contínuo/indefinido), agendamos apenas a PRÓXIMA ocorrência de cada horário.
- * Quando o [AlarmReceiver] dispara, ele reagenda o mesmo horário para o dia
- * seguinte (ver [scheduleNext]) — assim o alarme "se perpetua" sozinho,
- * respeitando a data de término quando houver.
+ * Os alarmes são chaveados só pelo HORÁRIO (não por medicamento): se dois
+ * remédios caem às 8h, existe UM alarme do sistema para as 8h, não dois. Quando
+ * ele dispara, o [AlarmReceiver] consulta o banco e resolve quais medicamentos
+ * estão de fato programados para aquele instante — é isso que permite agrupar
+ * tudo numa única notificação.
+ *
+ * Como o AlarmManager não tem "alarme exato recorrente", cada disparo se
+ * reagenda para o dia seguinte (ver [AlarmReceiver]) — [reconcile] só entra em
+ * ação quando o CONJUNTO de horários muda (medicamento criado/editado/excluído),
+ * pra ligar horários novos e desligar os que ninguém mais usa.
  */
 class AlarmScheduler(private val context: Context) {
 
     private val alarmManager: AlarmManager
         get() = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
-    /** Cancela e reagenda todos os horários do medicamento a partir de agora. */
-    fun scheduleAll(medication: Medication, from: LocalDateTime = LocalDateTime.now()) {
-        for (time in medication.times) {
-            scheduleNext(medication, time, from)
-        }
+    private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
+
+    /** Recalcula o conjunto de horários necessários a partir dos medicamentos ativos e ajusta os alarmes do sistema de acordo. */
+    fun reconcile(activeMedications: List<Medication>, from: LocalDateTime = LocalDateTime.now()) {
+        val needed = activeMedications.flatMap { it.scheduleTimes }.toSet()
+        val previous = readScheduledTimes()
+
+        (previous - needed).forEach { cancelTime(it) }
+        needed.forEach { scheduleTime(it, from) }
+
+        prefs.edit().putStringSet(KEY_SCHEDULED_TIMES, needed.map { it.toString() }.toSet()).apply()
     }
 
-    fun cancelAll(medication: Medication) {
-        for (time in medication.times) cancel(medication.id, time)
-    }
-
-    /**
-     * Agenda a próxima ocorrência de [time] para [medication] a partir de [from].
-     * Não faz nada se o medicamento já tiver terminado o tratamento.
-     */
-    fun scheduleNext(medication: Medication, time: LocalTime, from: LocalDateTime = LocalDateTime.now()) {
-        val nextTrigger = nextTriggerDateTime(medication, time, from) ?: return
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-            Log.w(TAG, "Permissão de alarme exato não concedida; alarme não agendado.")
+    /** Agenda a próxima ocorrência (hoje ou amanhã) de [time]. Idempotente — pode ser chamado de novo sem duplicar alarmes. */
+    fun scheduleTime(time: LocalTime, from: LocalDateTime = LocalDateTime.now()) {
+        if (!hasExactAlarmPermission()) {
+            Log.w(TAG, "Permissão de alarme exato não concedida; horário $time não agendado.")
             return
         }
+        var next = LocalDateTime.of(from.toLocalDate(), time)
+        if (!next.isAfter(from)) next = next.plusDays(1)
+        setAlarm(next, buildPendingIntent(time, isSnooze = false))
+    }
 
-        val pendingIntent = buildPendingIntent(medication.id, medication.name, medication.dosage, time)
-        val triggerMillis = nextTrigger.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    /** Agenda um disparo único (não recorrente) da soneca, [minutes] a partir de agora, para o mesmo [time] original. */
+    fun scheduleSnooze(time: LocalTime, minutes: Int = 10) {
+        if (!hasExactAlarmPermission()) return
+        val trigger = LocalDateTime.now().plusMinutes(minutes.toLong())
+        setAlarm(trigger, buildPendingIntent(time, isSnooze = true))
+    }
 
+    fun cancelTime(time: LocalTime) {
+        val pendingIntent = buildPendingIntent(time, isSnooze = false)
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+    }
+
+    private fun setAlarm(dateTime: LocalDateTime, pendingIntent: PendingIntent) {
+        val triggerMillis = dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         try {
             // setExactAndAllowWhileIdle dispara mesmo em Doze Mode / App Standby.
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
@@ -59,68 +77,39 @@ class AlarmScheduler(private val context: Context) {
         }
     }
 
-    fun cancel(medicationId: Long, time: LocalTime) {
-        val intent = Intent(context, AlarmReceiver::class.java).apply { action = ACTION_DOSE_ALARM }
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            requestCodeFor(medicationId, time),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        alarmManager.cancel(pendingIntent)
-        pendingIntent.cancel()
-    }
+    private fun hasExactAlarmPermission(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()
 
-    private fun buildPendingIntent(
-        medicationId: Long,
-        name: String,
-        dosage: String,
-        time: LocalTime
-    ): PendingIntent {
+    private fun readScheduledTimes(): Set<LocalTime> =
+        (prefs.getStringSet(KEY_SCHEDULED_TIMES, emptySet()) ?: emptySet())
+            .mapNotNull { runCatching { LocalTime.parse(it) }.getOrNull() }
+            .toSet()
+
+    private fun buildPendingIntent(time: LocalTime, isSnooze: Boolean): PendingIntent {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             action = ACTION_DOSE_ALARM
-            putExtra(EXTRA_MEDICATION_ID, medicationId)
-            putExtra(EXTRA_MEDICATION_NAME, name)
-            putExtra(EXTRA_MEDICATION_DOSAGE, dosage)
             putExtra(EXTRA_TIME, time.toString())
+            putExtra(EXTRA_IS_SNOOZE, isSnooze)
         }
+        val requestCode = if (isSnooze) requestCodeForSnooze(time) else requestCodeFor(time)
         return PendingIntent.getBroadcast(
             context,
-            requestCodeFor(medicationId, time),
+            requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-    }
-
-    /** Próximo instante (hoje ou dias seguintes) em que [time] deve disparar, ou null se o tratamento já terminou. */
-    private fun nextTriggerDateTime(
-        medication: Medication,
-        time: LocalTime,
-        from: LocalDateTime
-    ): LocalDateTime? {
-        var candidate = LocalDateTime.of(from.toLocalDate(), time)
-        if (!candidate.isAfter(from)) {
-            candidate = candidate.plusDays(1)
-        }
-        while (candidate.toLocalDate().isBefore(medication.startDate)) {
-            candidate = candidate.plusDays(1)
-        }
-        val endDate = medication.endDate
-        if (!medication.isContinuous && endDate != null && candidate.toLocalDate().isAfter(endDate)) {
-            return null
-        }
-        return candidate
     }
 
     companion object {
         private const val TAG = "AlarmScheduler"
-        const val ACTION_DOSE_ALARM = "com.medicontrol.app.action.DOSE_ALARM"
-        const val EXTRA_MEDICATION_ID = "extra_medication_id"
-        const val EXTRA_MEDICATION_NAME = "extra_medication_name"
-        const val EXTRA_MEDICATION_DOSAGE = "extra_medication_dosage"
-        const val EXTRA_TIME = "extra_time"
+        private const val PREFS_NAME = "alarm_scheduler"
+        private const val KEY_SCHEDULED_TIMES = "scheduled_times"
 
-        fun requestCodeFor(medicationId: Long, time: LocalTime): Int =
-            "$medicationId-$time".hashCode()
+        const val ACTION_DOSE_ALARM = "com.medicontrol.app.action.DOSE_ALARM"
+        const val EXTRA_TIME = "extra_time"
+        const val EXTRA_IS_SNOOZE = "extra_is_snooze"
+
+        fun requestCodeFor(time: LocalTime): Int = "slot-$time".hashCode()
+        fun requestCodeForSnooze(time: LocalTime): Int = "snooze-$time".hashCode()
     }
 }

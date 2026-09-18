@@ -12,7 +12,7 @@ import com.medicontrol.app.data.entity.Medication
 
 @Database(
     entities = [Medication::class, DoseRecord::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -31,7 +31,12 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "medicontrol.db"
-                ).build().also { INSTANCE = it }
+                )
+                    // App pré-lançamento, sem base instalada em produção ainda: em vez de
+                    // escrever Migrations manuais a cada mudança de schema, recriamos o banco.
+                    // Trocar por Migrations reais antes do primeiro release público.
+                    .fallbackToDestructiveMigration()
+                    .build().also { INSTANCE = it }
             }
     }
 }

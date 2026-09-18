@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -20,6 +22,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,18 +47,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.medicontrol.app.MediControlApp
+import com.medicontrol.app.data.model.RecurrenceType
 import com.medicontrol.app.ui.components.ColorPickerRow
 import com.medicontrol.app.ui.components.IconPickerRow
 import com.medicontrol.app.util.toDisplayString
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.format.TextStyle
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +85,7 @@ fun AddEditMedicationScreen(
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var showAnchorTimePicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -163,23 +172,79 @@ fun AddEditMedicationScreen(
 
             HorizontalDivider()
 
-            Text("Horários do dia", style = MaterialTheme.typography.titleMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(viewModel.times) { time ->
-                    InputChip(
-                        selected = false,
-                        onClick = {},
-                        label = { Text(time.toDisplayString()) },
-                        trailingIcon = {
-                            IconButton(onClick = { viewModel.removeTime(time) }) {
-                                Icon(Icons.Default.Close, contentDescription = "Remover horário")
+            Text("Cadência", style = MaterialTheme.typography.titleMedium)
+            RecurrenceTypeRow(
+                selected = viewModel.recurrenceType,
+                onSelected = viewModel::onRecurrenceTypeChange
+            )
+
+            when (viewModel.recurrenceType) {
+                RecurrenceType.WEEKDAYS -> WeekdayPickerRow(
+                    selected = viewModel.recurrenceWeekdays,
+                    onToggle = viewModel::toggleWeekday
+                )
+                RecurrenceType.EVERY_N_DAYS -> NumberField(
+                    label = "A cada quantos dias",
+                    value = viewModel.recurrenceIntervalDays,
+                    onValueChange = { viewModel.recurrenceIntervalDays = it.coerceAtLeast(1) }
+                )
+                RecurrenceType.EVERY_N_HOURS -> NumberField(
+                    label = "A cada quantas horas",
+                    value = viewModel.recurrenceIntervalHours,
+                    onValueChange = { viewModel.recurrenceIntervalHours = it.coerceIn(1, 23) }
+                )
+                RecurrenceType.DAILY -> Unit
+            }
+
+            HorizontalDivider()
+
+            if (viewModel.recurrenceType == RecurrenceType.EVERY_N_HOURS) {
+                Text("Horário inicial", style = MaterialTheme.typography.titleMedium)
+                OutlinedButton(onClick = { showAnchorTimePicker = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(viewModel.times.firstOrNull()?.toDisplayString() ?: "Selecionar horário")
+                }
+            } else {
+                Text("Horários do dia", style = MaterialTheme.typography.titleMedium)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(viewModel.times) { time ->
+                        InputChip(
+                            selected = false,
+                            onClick = {},
+                            label = { Text(time.toDisplayString()) },
+                            trailingIcon = {
+                                IconButton(onClick = { viewModel.removeTime(time) }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Remover horário")
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
+                }
+                OutlinedButton(onClick = { showTimePicker = true }) {
+                    Text("+ Adicionar horário")
                 }
             }
-            OutlinedButton(onClick = { showTimePicker = true }) {
-                Text("+ Adicionar horário")
+
+            HorizontalDivider()
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Switch(checked = viewModel.stockTrackingEnabled, onCheckedChange = { viewModel.stockTrackingEnabled = it })
+                Text("Controlar estoque")
+            }
+            if (viewModel.stockTrackingEnabled) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    NumberField(
+                        label = "Quantidade em estoque",
+                        value = viewModel.stockQuantity,
+                        onValueChange = { viewModel.stockQuantity = it.coerceAtLeast(0) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    NumberField(
+                        label = "Avisar quando restar",
+                        value = viewModel.stockThreshold,
+                        onValueChange = { viewModel.stockThreshold = it.coerceAtLeast(0) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             Button(
@@ -215,6 +280,13 @@ fun AddEditMedicationScreen(
         )
     }
 
+    if (showAnchorTimePicker) {
+        TimePickerModal(
+            onDismiss = { showAnchorTimePicker = false },
+            onConfirm = { viewModel.setAnchorTime(it); showAnchorTimePicker = false }
+        )
+    }
+
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
@@ -228,6 +300,50 @@ fun AddEditMedicationScreen(
             }
         )
     }
+}
+
+@Composable
+private fun RecurrenceTypeRow(selected: RecurrenceType, onSelected: (RecurrenceType) -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(RecurrenceType.entries) { type ->
+            FilterChip(
+                selected = type == selected,
+                onClick = { onSelected(type) },
+                label = { Text(type.label) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeekdayPickerRow(selected: Set<DayOfWeek>, onToggle: (DayOfWeek) -> Unit) {
+    val locale = Locale("pt", "BR")
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(DayOfWeek.values().toList()) { day ->
+            val label = day.getDisplayName(TextStyle.SHORT, locale).replaceFirstChar { it.uppercase() }
+            FilterChip(
+                selected = day in selected,
+                onClick = { onToggle(day) },
+                label = { Text(label) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun NumberField(
+    label: String,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = value.toString(),
+        onValueChange = { text -> onValueChange(text.filter { it.isDigit() }.take(3).toIntOrNull() ?: 0) },
+        label = { Text(label) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = modifier.width(180.dp)
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

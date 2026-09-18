@@ -3,15 +3,15 @@ package com.medicontrol.app.alarm
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.medicontrol.app.data.db.AppDatabase
+import com.medicontrol.app.MediControlApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
  * O AlarmManager perde todos os alarmes agendados quando o aparelho reinicia.
- * Este receiver reagenda a próxima dose de cada medicamento ativo assim que
- * o sistema termina de inicializar.
+ * Este receiver reconcilia os horários a partir do banco assim que o sistema
+ * termina de inicializar (mesma lógica usada ao salvar/excluir um medicamento).
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -27,9 +27,7 @@ class BootReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val medications = AppDatabase.getInstance(context).medicationDao().getAllActive()
-                val scheduler = AlarmScheduler(context)
-                medications.forEach { scheduler.scheduleAll(it) }
+                (context.applicationContext as MediControlApp).repository.reconcileAlarms()
             } finally {
                 pendingResult.finish()
             }

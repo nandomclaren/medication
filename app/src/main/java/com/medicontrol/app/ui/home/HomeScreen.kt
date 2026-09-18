@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -26,6 +27,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -59,7 +61,8 @@ import com.medicontrol.app.util.toDisplayString
 @Composable
 fun HomeScreen(
     onAddMedication: () -> Unit,
-    onEditMedication: (Long) -> Unit
+    onEditMedication: (Long) -> Unit,
+    onOpenBackup: () -> Unit
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as MediControlApp
@@ -76,7 +79,14 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             Column {
-                TopAppBar(title = { Text(selectedDate.monthLabel()) })
+                TopAppBar(
+                    title = { Text(selectedDate.monthLabel()) },
+                    actions = {
+                        IconButton(onClick = onOpenBackup) {
+                            Icon(Icons.Default.CloudUpload, contentDescription = "Backup")
+                        }
+                    }
+                )
                 DaySelector(
                     days = viewModel.visibleDays,
                     selectedDate = selectedDate,
@@ -161,12 +171,35 @@ private fun DoseCard(dose: DoseUiModel, onToggle: (Boolean) -> Unit, onClick: ()
                             )
                         }
                     }
+                    if (dose.medication.isLowStock) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text(
+                                text = "Estoque baixo",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
                 Text(
                     text = "${dose.medication.dosage} · ${dose.time.toDisplayString()}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                dose.medication.stockQuantity?.let { quantity ->
+                    if (dose.medication.isLowStock) {
+                        Text(
+                            text = "Restam $quantity doses no estoque",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
             }
 
             Checkbox(checked = taken, onCheckedChange = onToggle)
