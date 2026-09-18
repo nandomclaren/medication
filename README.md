@@ -1,4 +1,4 @@
-# Lembrete de Remédios (MediControl)
+# MediControl
 
 App Android **100% offline** de controle e lembrete de medicamentos, em Kotlin + Jetpack Compose (Material 3) + Room. Sem anúncios, sem assinaturas, sem backend.
 
@@ -44,7 +44,7 @@ app/src/main/java/com/medicontrol/app/
 - **Notificação agrupada por horário**: remédios com o mesmo horário caem numa única notificação — 1 remédio usa "Tomei"/"Pular"; 2 ou mais usam "Marcar todos como tomados"/"Pular todos" e listam cada um. Botão de soneca (10 min) em ambos os casos.
 - **Controle de estoque** opcional por medicamento: decrementa a cada dose tomada (e desfaz ao desmarcar), com aviso visual de estoque baixo na Home e no cadastro.
 - **Backup/restore local**: exporta medicamentos + histórico para um `.json`, escolhendo o destino pelo seletor do próprio Android (inclui Google Drive, se instalado) — sem conta nem servidor.
-- **Widget de tela inicial** ("Próximas doses", Jetpack Glance) com Material You: cores dinâmicas a partir do papel de parede no Android 12+, com a paleta do app como fallback antes disso. Marca dose como tomada direto do widget.
+- **Widget de tela inicial** ("Próximas doses", Jetpack Glance) com Material You: cores dinâmicas a partir do papel de parede no Android 12+, com a paleta do app como fallback antes disso. Responsivo por tamanho (`SizeMode.Responsive`) — pequeno mostra só a próxima dose, médio mostra a lista do dia. Marca dose como tomada direto do widget.
 
 ## Decisões de modelagem importantes
 
@@ -129,7 +129,6 @@ Cuidado: isso também acelera outros apps/serviços do sistema; prefira cadastra
 ## Próximas features (planejadas, ainda não implementadas)
 
 - **Relatório de adesão exportável** (PDF/CSV) para levar ao médico — os dados já existem em `DoseRecord`/`getMissedDays`, falta só a tela de exportação e o formato de saída.
-- **Widget responsivo por tamanho** (compacto = só a próxima dose / médio = lista do dia, como no mockup original: https://claude.ai/artifact/BJ9kdCyu94qcXCBB6rtxdL). A v1 implementada usa um layout único de lista que se adapta razoavelmente bem a qualquer tamanho, mas não troca de layout conforme o usuário redimensiona.
 - **Atualização automática à meia-noite:** hoje o widget só troca de dia quando algum alarme dispara ou alguma dose é mexida; um app sem nenhum medicamento cadastrado com horário de madrugada pode, em teoria, ficar mostrando o dia anterior até a próxima interação. Resolver exigiria um `WorkManager` agendado pra meia-noite — deixado de fora por ora para não adicionar mais uma peça de infraestrutura de agendamento além do `AlarmManager` já existente.
 
 ## Sobre o Railway

@@ -3,16 +3,19 @@ package com.medicontrol.app.widget
 import android.content.Context
 import android.os.Build
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalSize
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
@@ -46,6 +49,14 @@ import java.time.LocalDate
 
 private const val MAX_VISIBLE_ROWS = 4
 
+// As duas paragens que o widget pode assumir — o Android "encaixa" o
+// tamanho real (o usuário arrasta livremente) na mais próxima destas duas.
+private val COMPACT_SIZE = DpSize(110.dp, 56.dp)
+private val MEDIUM_SIZE = DpSize(200.dp, 110.dp)
+
+// Abaixo desta largura já não cabe a lista — mostramos só a próxima dose.
+private val COMPACT_WIDTH_THRESHOLD = 160.dp
+
 /**
  * Widget "Próximas doses". Usa Material You (`GlanceTheme.colors`, dinâmico
  * a partir da paleta do papel de parede) no Android 12+; em versões
@@ -53,6 +64,8 @@ private const val MAX_VISIBLE_ROWS = 4
  * já que o Glance só ganhou suporte a cor dinâmica na API 31.
  */
 class MediControlWidget : GlanceAppWidget() {
+
+    override val sizeMode = SizeMode.Responsive(setOf(COMPACT_SIZE, MEDIUM_SIZE))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val app = context.applicationContext as MediControlApp
@@ -66,7 +79,11 @@ class MediControlWidget : GlanceAppWidget() {
                 WidgetColorFallback
             }
             GlanceTheme(colors = colors) {
-                WidgetContent(today, doses)
+                if (LocalSize.current.width < COMPACT_WIDTH_THRESHOLD) {
+                    CompactWidgetContent(doses)
+                } else {
+                    WidgetContent(today, doses)
+                }
             }
         }
     }
@@ -104,6 +121,47 @@ private fun WidgetContent(today: LocalDate, doses: List<DoseUiModel>) {
     }
 }
 
+/**
+ * Layout compacto (~2×1): só a próxima dose pendente. Quando mais de um
+ * remédio cai no mesmo horário, mostra o primeiro + "+N" — o checkbox marca
+ * só esse; os demais ficam pro toque no resto do card, que abre o app.
+ */
+@Composable
+private fun CompactWidgetContent(doses: List<DoseUiModel>) {
+    val pending = doses.filter { it.status != DoseStatus.TAKEN }.sortedBy { it.time }
+
+    Column(
+        modifier = GlanceModifier
+            .fillMaxSize()
+            .background(GlanceTheme.colors.surface)
+            .cornerRadius(18.dp)
+            .padding(10.dp)
+            .clickable(actionStartActivity<MainActivity>())
+    ) {
+        Text(
+            text = "Próxima dose",
+            style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Bold, color = GlanceTheme.colors.primary)
+        )
+        Spacer(modifier = GlanceModifier.height(4.dp))
+
+        if (pending.isEmpty()) {
+            Text(
+                text = "Tudo em dia",
+                style = TextStyle(fontSize = 12.sp, color = GlanceTheme.colors.onSurfaceVariant)
+            )
+        } else {
+            val earliestTime = pending.first().time
+            val atSameTime = pending.filter { it.time == earliestTime }
+            val label = if (atSameTime.size > 1) {
+                "${atSameTime.first().medication.name} +${atSameTime.size - 1}"
+            } else {
+                atSameTime.first().medication.name
+            }
+            DoseRow(dose = atSameTime.first(), nameOverride = label)
+        }
+    }
+}
+
 @Composable
 private fun WidgetHeader(today: LocalDate) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
@@ -124,7 +182,7 @@ private fun WidgetHeader(today: LocalDate) {
 }
 
 @Composable
-private fun DoseRow(dose: DoseUiModel) {
+private fun DoseRow(dose: DoseUiModel, nameOverride: String? = null) {
     val taken = dose.status == DoseStatus.TAKEN
 
     Row(
@@ -142,7 +200,7 @@ private fun DoseRow(dose: DoseUiModel) {
 
         Column(modifier = GlanceModifier.defaultWeight()) {
             Text(
-                text = dose.medication.name,
+                text = nameOverride ?: dose.medication.name,
                 maxLines = 1,
                 style = TextStyle(
                     fontSize = 12.sp,
