@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ícone monocromático da notificação (barra de status usa só o canal alfa):
+     uma cápsula única — sem "pingo" separado do traço, ao contrário do
+     antigo ic_dialog_info do sistema, que lembrava a letra "i". -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group
+        android:pivotX="12"
+        android:pivotY="12"
+        android:rotation="-45">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M7,7 L17,7 A5,5 0 0 1 17,17 L7,17 A5,5 0 0 1 7,7 Z" />
+    </group>
+</vector>

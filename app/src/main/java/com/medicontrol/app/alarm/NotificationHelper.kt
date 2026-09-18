@@ -57,7 +57,7 @@ object NotificationHelper {
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_notification_pill)
             .setContentTitle(medicationName)
             .setContentText("Hora de tomar: $dosage")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
