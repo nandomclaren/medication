@@ -10,7 +10,10 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
-private val LightColors = lightColorScheme(
+// Não-privadas: reaproveitadas como fallback pré-Android 12 pelo widget
+// (ver ui/theme/WidgetColors.kt), já que Glance só tem cores dinâmicas a
+// partir da API 31.
+val LightColors = lightColorScheme(
     primary = PrimaryLight,
     onPrimary = OnPrimaryLight,
     primaryContainer = PrimaryContainerLight,
@@ -20,7 +23,7 @@ private val LightColors = lightColorScheme(
     error = ErrorLight
 )
 
-private val DarkColors = darkColorScheme(
+val DarkColors = darkColorScheme(
     primary = PrimaryDark,
     onPrimary = OnPrimaryDark,
     primaryContainer = PrimaryContainerDark,

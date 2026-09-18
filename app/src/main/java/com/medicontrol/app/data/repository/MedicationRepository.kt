@@ -15,11 +15,17 @@ import kotlinx.coroutines.flow.Flow
  * Ponto único de acesso aos dados: combina Room (persistência) com o
  * [AlarmScheduler] (agendamento do sistema), para que a UI e os
  * BroadcastReceivers nunca precisem mexer em AlarmManager ou estoque na mão.
+ *
+ * [onDataChanged] é chamado depois de qualquer escrita que muda o que
+ * aparece na tela — hoje só usado para atualizar o widget de tela inicial
+ * (ver `MediControlApp`), mantendo o repositório sem depender diretamente
+ * de APIs do Glance/AppWidget.
  */
 class MedicationRepository(
     private val medicationDao: MedicationDao,
     private val doseRecordDao: DoseRecordDao,
-    private val alarmScheduler: AlarmScheduler
+    private val alarmScheduler: AlarmScheduler,
+    private val onDataChanged: suspend () -> Unit = {}
 ) {
 
     fun observeMedications(): Flow<List<Medication>> = medicationDao.observeActive()
@@ -37,12 +43,14 @@ class MedicationRepository(
             medication.id
         }
         reconcileAlarms()
+        onDataChanged()
         return id
     }
 
     suspend fun deleteMedication(medication: Medication) {
         medicationDao.delete(medication)
         reconcileAlarms()
+        onDataChanged()
     }
 
     /** Recalcula os alarmes do sistema a partir do conjunto atual de medicamentos ativos. Chamado após salvar/excluir e no boot. */
@@ -111,6 +119,7 @@ class MedicationRepository(
                 )
             )
         }
+        onDataChanged()
     }
 
     private suspend fun adjustStock(medication: Medication, delta: Int) {

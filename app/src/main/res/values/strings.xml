@@ -7,4 +7,5 @@
     <string name="notification_action_taken_all">Marcar todos como tomados</string>
     <string name="notification_action_skip_all">Pular todos</string>
     <string name="notification_action_snooze">Soneca %1$d min</string>
+    <string name="widget_description">Mostra as próximas doses do dia e deixa marcar como tomada direto da tela inicial.</string>
 </resources>

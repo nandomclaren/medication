@@ -8,6 +8,8 @@ App Android **100% offline** de controle e lembrete de medicamentos, em Kotlin +
 - Room 2.6.1 (KSP) para persistência local
 - Navigation Compose
 - `AlarmManager.setExactAndAllowWhileIdle()` + `BroadcastReceiver` para os lembretes
+- Jetpack Glance (`glance-appwidget` + `glance-material3`) para o widget de tela inicial
+- kotlinx.serialization para o backup local em JSON
 - `minSdk 26` (Android 8.0) — permite usar `java.time` nativamente, sem desugaring
 
 ## Estrutura
@@ -24,12 +26,13 @@ app/src/main/java/com/medicontrol/app/
 │   ├── backup/           # BackupData (DTOs serializáveis) + BackupManager (export/import via SAF)
 │   └── repository/      # MedicationRepository (une Room + AlarmManager)
 ├── ui/
-│   ├── theme/            # Color/Theme/Type — Material You + dark/light
+│   ├── theme/            # Color/Theme/Type — Material You + dark/light (+ WidgetColors, fallback do widget)
 │   ├── components/       # MedicationIconView (Canvas), DaySelector, Icon/ColorPickerRow
 │   ├── home/              # Tela principal
 │   ├── addedit/           # Cadastro/edição de medicamento
 │   ├── backup/            # Tela de exportar/restaurar backup
 │   └── navigation/        # NavHost
+├── widget/            # MediControlWidget + Receiver (Jetpack Glance) e a ação de marcar dose tomada
 └── util/                    # Formatação de datas/horas
 ```
 
@@ -41,6 +44,7 @@ app/src/main/java/com/medicontrol/app/
 - **Notificação agrupada por horário**: remédios com o mesmo horário caem numa única notificação — 1 remédio usa "Tomei"/"Pular"; 2 ou mais usam "Marcar todos como tomados"/"Pular todos" e listam cada um. Botão de soneca (10 min) em ambos os casos.
 - **Controle de estoque** opcional por medicamento: decrementa a cada dose tomada (e desfaz ao desmarcar), com aviso visual de estoque baixo na Home e no cadastro.
 - **Backup/restore local**: exporta medicamentos + histórico para um `.json`, escolhendo o destino pelo seletor do próprio Android (inclui Google Drive, se instalado) — sem conta nem servidor.
+- **Widget de tela inicial** ("Próximas doses", Jetpack Glance) com Material You: cores dinâmicas a partir do papel de parede no Android 12+, com a paleta do app como fallback antes disso. Marca dose como tomada direto do widget.
 
 ## Decisões de modelagem importantes
 
@@ -50,6 +54,7 @@ app/src/main/java/com/medicontrol/app/
 - **Agendamento "auto-perpetuante":** como o AlarmManager não tem alarme exato recorrente, cada disparo reagenda o mesmo horário para o dia seguinte — parando sozinho quando nenhum medicamento mais precisa daquele horário (ou a data de término é ultrapassada). A soneca usa um disparo único separado, sem mexer nesse ciclo.
 - **Indicador de adesão** (dias em vermelho na barra superior): calculado em memória cruzando os medicamentos ativos em cada dia passado com os `DoseRecord` de status `TAKEN` — sem job em background.
 - **Backup é restauração, não mescla:** importar um `.json` apaga e recria as tabelas `medications`/`dose_records` dentro de uma transação (`AppDatabase.withTransaction`). A UI confirma isso com o usuário antes de deixar escolher o arquivo.
+- **Widget com Material You de verdade, não só cor fixa:** `MediControlWidget` usa `GlanceTheme.colors` (dinâmico, API 31+) e cai para `WidgetColorFallback` — a mesma `ColorScheme` clara/escura do app, só reembalada em `ColorProviders` — em versões anteriores, já que o Glance só suporta cor dinâmica a partir do Android 12. Qualquer mudança de dose (Home, notificação ou o próprio widget) passa por `MedicationRepository`, que dispara `WidgetRefresher.updateAll()` ao final — o widget nunca fica desatualizado por conta própria. `AlarmReceiver` também aciona esse refresh a cada disparo, cobrindo a virada do dia mesmo sem interação do usuário.
 
 ## Build
 
@@ -124,7 +129,8 @@ Cuidado: isso também acelera outros apps/serviços do sistema; prefira cadastra
 ## Próximas features (planejadas, ainda não implementadas)
 
 - **Relatório de adesão exportável** (PDF/CSV) para levar ao médico — os dados já existem em `DoseRecord`/`getMissedDays`, falta só a tela de exportação e o formato de saída.
-- **Widget de tela inicial** ("próximas doses"), em Jetpack Glance. Mockup validado: https://claude.ai/artifact/BJ9kdCyu94qcXCBB6rtxdL (dois temas, dois tamanhos e o estado vazio).
+- **Widget responsivo por tamanho** (compacto = só a próxima dose / médio = lista do dia, como no mockup original: https://claude.ai/artifact/BJ9kdCyu94qcXCBB6rtxdL). A v1 implementada usa um layout único de lista que se adapta razoavelmente bem a qualquer tamanho, mas não troca de layout conforme o usuário redimensiona.
+- **Atualização automática à meia-noite:** hoje o widget só troca de dia quando algum alarme dispara ou alguma dose é mexida; um app sem nenhum medicamento cadastrado com horário de madrugada pode, em teoria, ficar mostrando o dia anterior até a próxima interação. Resolver exigiria um `WorkManager` agendado pra meia-noite — deixado de fora por ora para não adicionar mais uma peça de infraestrutura de agendamento além do `AlarmManager` já existente.
 
 ## Sobre o Railway
 

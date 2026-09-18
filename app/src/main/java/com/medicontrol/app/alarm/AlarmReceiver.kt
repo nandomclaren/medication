@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import com.medicontrol.app.data.db.AppDatabase
 import com.medicontrol.app.data.model.DoseStatus
+import com.medicontrol.app.widget.WidgetRefresher
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlinx.coroutines.CoroutineScope
@@ -60,6 +61,11 @@ class AlarmReceiver : BroadcastReceiver() {
                 if (!isSnooze) {
                     AlarmScheduler(context).scheduleTime(time)
                 }
+
+                // Cada disparo também serve de "tick" pro widget — cobre a
+                // virada do dia mesmo se o usuário não abrir o app nem
+                // interagir com nenhuma dose.
+                WidgetRefresher.refresh(context)
             } finally {
                 pendingResult.finish()
             }

@@ -82,6 +82,11 @@ dependencies {
     // Backup/restore local (exporta os dados do Room para JSON)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
+    // Widget de tela inicial (Jetpack Glance) — glance-material3 dá acesso a
+    // GlanceTheme.colors com cores dinâmicas (Material You) no Android 12+
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+    implementation("androidx.glance:glance-material3:1.1.1")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 

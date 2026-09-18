@@ -6,6 +6,7 @@ import com.medicontrol.app.alarm.NotificationHelper
 import com.medicontrol.app.data.backup.BackupManager
 import com.medicontrol.app.data.db.AppDatabase
 import com.medicontrol.app.data.repository.MedicationRepository
+import com.medicontrol.app.widget.WidgetRefresher
 
 /**
  * Application "manual" (sem framework de DI): cria o banco, o scheduler e o
@@ -16,7 +17,9 @@ class MediControlApp : Application() {
     val database: AppDatabase by lazy { AppDatabase.getInstance(this) }
     val alarmScheduler: AlarmScheduler by lazy { AlarmScheduler(this) }
     val repository: MedicationRepository by lazy {
-        MedicationRepository(database.medicationDao(), database.doseRecordDao(), alarmScheduler)
+        MedicationRepository(database.medicationDao(), database.doseRecordDao(), alarmScheduler) {
+            WidgetRefresher.refresh(this)
+        }
     }
     val backupManager: BackupManager by lazy { BackupManager(this, database) }
 

@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.medicontrol.app.MediControlApp
+import com.medicontrol.app.widget.WidgetRefresher
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
@@ -67,6 +68,7 @@ fun BackupScreen(onBack: () -> Unit) {
             runCatching { app.backupManager.import(uri) }
                 .onSuccess { count ->
                     app.repository.reconcileAlarms()
+                    WidgetRefresher.refresh(app)
                     statusMessage = "$count medicamentos restaurados."
                 }
                 .onFailure { statusMessage = "Não foi possível restaurar o backup: ${it.message}" }

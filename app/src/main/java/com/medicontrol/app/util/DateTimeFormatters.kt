@@ -15,3 +15,10 @@ fun LocalDate.toDisplayString(): String =
 
 fun LocalDate.monthLabel(): String =
     month.getDisplayName(TextStyle.FULL, ptBr).replaceFirstChar { it.uppercase() } + " de $year"
+
+/** Formato compacto usado no cabeçalho do widget, ex: "Qui, 18 set". */
+fun LocalDate.toShortWeekdayString(): String {
+    val weekday = dayOfWeek.getDisplayName(TextStyle.SHORT, ptBr).replaceFirstChar { it.uppercase() }
+    val month = format(DateTimeFormatter.ofPattern("MMM", ptBr)).replaceFirstChar { it.uppercase() }
+    return "$weekday, $dayOfMonth $month".replace(".", "")
+}

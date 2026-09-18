@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Preview estático mostrado no selecionador de widgets do launcher. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="110dp"
+    android:viewportWidth="200"
+    android:viewportHeight="110">
+    <path
+        android:pathData="M0,16 A16,16 0 0 1 16,0 L184,0 A16,16 0 0 1 200,16 L200,94 A16,16 0 0 1 184,110 L16,110 A16,16 0 0 1 0,94 Z"
+        android:fillColor="#FFFFFF" />
+    <group android:translateX="18" android:translateY="18" android:rotation="-45">
+        <path
+            android:pathData="M-9,-9 L9,-9 A9,9 0 0 1 9,9 L-9,9 A9,9 0 0 1 -9,-9 Z"
+            android:fillColor="#1565C0" />
+    </group>
+    <path android:pathData="M42,14 L120,14" android:strokeColor="#1565C0" android:strokeWidth="3" />
+    <path android:pathData="M42,28 L90,28" android:strokeColor="#B9C6D8" android:strokeWidth="2" />
+
+    <path android:pathData="M18,50 L182,50" android:strokeColor="#E1E7F0" android:strokeWidth="1" />
+
+    <path android:pathData="M18,64 L120,64" android:strokeColor="#1A2333" android:strokeWidth="3" />
+    <path android:pathData="M18,76 L80,76" android:strokeColor="#8A93A0" android:strokeWidth="2" />
+
+    <path android:pathData="M18,92 L110,92" android:strokeColor="#1A2333" android:strokeWidth="3" />
+</vector>

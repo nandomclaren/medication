@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Layout mostrado só no instante entre o widget ser adicionado e o Glance
+     terminar de compor o conteúdo real — o Glance substitui isso sozinho. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
