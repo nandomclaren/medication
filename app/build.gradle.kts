@@ -87,6 +87,9 @@ dependencies {
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("androidx.glance:glance-material3:1.1.1")
 
+    // Backup automático diário (roda em background mesmo com o app fechado)
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 

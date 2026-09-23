@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -27,6 +28,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -209,12 +211,14 @@ fun AddEditMedicationScreen(
                     items(viewModel.times) { time ->
                         InputChip(
                             selected = false,
-                            onClick = {},
+                            onClick = { viewModel.removeTime(time) },
                             label = { Text(time.toDisplayString()) },
                             trailingIcon = {
-                                IconButton(onClick = { viewModel.removeTime(time) }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Remover horário")
-                                }
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Remover horário",
+                                    modifier = Modifier.size(InputChipDefaults.IconSize)
+                                )
                             }
                         )
                     }

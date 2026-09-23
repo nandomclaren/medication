@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     // App pré-lançamento, sem base instalada em produção ainda: em vez de
                     // escrever Migrations manuais a cada mudança de schema, recriamos o banco.
                     // Trocar por Migrations reais antes do primeiro release público.
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .build().also { INSTANCE = it }
             }
     }

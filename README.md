@@ -43,7 +43,7 @@ app/src/main/java/com/medicontrol/app/
 - Lembretes exatos (`AlarmManager.setExactAndAllowWhileIdle`) que sobrevivem a Doze Mode e reboot.
 - **Notificação agrupada por horário**: remédios com o mesmo horário caem numa única notificação — 1 remédio usa "Tomei"/"Pular"; 2 ou mais usam "Marcar todos como tomados"/"Pular todos" e listam cada um. Botão de soneca (10 min) em ambos os casos.
 - **Controle de estoque** opcional por medicamento: decrementa a cada dose tomada (e desfaz ao desmarcar), com aviso visual de estoque baixo na Home e no cadastro.
-- **Backup/restore local**: exporta medicamentos + histórico para um `.json`, escolhendo o destino pelo seletor do próprio Android (inclui Google Drive, se instalado) — sem conta nem servidor.
+- **Backup/restore local**: exporta medicamentos + histórico para um `.json`, escolhendo o destino pelo seletor do próprio Android (inclui Google Drive, se instalado) — sem conta nem servidor. Também dá pra ligar um **backup automático diário** (WorkManager) que sobrescreve o mesmo arquivo sozinho, mesmo com o app fechado.
 - **Widget de tela inicial** ("Próximas doses", Jetpack Glance) com Material You: cores dinâmicas a partir do papel de parede no Android 12+, com a paleta do app como fallback antes disso. Responsivo por tamanho (`SizeMode.Responsive`) — pequeno mostra só a próxima dose, médio mostra a lista do dia. Marca dose como tomada direto do widget.
 
 ## Decisões de modelagem importantes
@@ -54,6 +54,7 @@ app/src/main/java/com/medicontrol/app/
 - **Agendamento "auto-perpetuante":** como o AlarmManager não tem alarme exato recorrente, cada disparo reagenda o mesmo horário para o dia seguinte — parando sozinho quando nenhum medicamento mais precisa daquele horário (ou a data de término é ultrapassada). A soneca usa um disparo único separado, sem mexer nesse ciclo.
 - **Indicador de adesão** (dias em vermelho na barra superior): calculado em memória cruzando os medicamentos ativos em cada dia passado com os `DoseRecord` de status `TAKEN` — sem job em background.
 - **Backup é restauração, não mescla:** importar um `.json` apaga e recria as tabelas `medications`/`dose_records` dentro de uma transação (`AppDatabase.withTransaction`). A UI confirma isso com o usuário antes de deixar escolher o arquivo.
+- **Backup automático precisa de permissão persistente no Uri:** o `Uri` que o seletor do Android devolve só é válido enquanto o app está vivo, a menos que a gente chame `contentResolver.takePersistableUriPermission(...)` — sem isso, o `AutoBackupWorker` (que roda dias depois, em background) perderia acesso ao arquivo. `AutoBackupPrefs` guarda esse `Uri` já "permanente" em `SharedPreferences`.
 - **Widget com Material You de verdade, não só cor fixa:** `MediControlWidget` usa `GlanceTheme.colors` (dinâmico, API 31+) e cai para `WidgetColorFallback` — a mesma `ColorScheme` clara/escura do app, só reembalada em `ColorProviders` — em versões anteriores, já que o Glance só suporta cor dinâmica a partir do Android 12. Qualquer mudança de dose (Home, notificação ou o próprio widget) passa por `MedicationRepository`, que dispara `WidgetRefresher.updateAll()` ao final — o widget nunca fica desatualizado por conta própria. `AlarmReceiver` também aciona esse refresh a cada disparo, cobrindo a virada do dia mesmo sem interação do usuário.
 
 ## Build
